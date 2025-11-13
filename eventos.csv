@@ -1,0 +1,3 @@
+id,nombre,fechaHora,venueId,organizadorLogin,aprobado,cancelado
+E1,Concierto de Rock,2025-11-19 23:41:25,V1,promotor1,true,false
+E2,Festival de Jazz,2025-11-26 23:41:25,V2,promotor2,true,false

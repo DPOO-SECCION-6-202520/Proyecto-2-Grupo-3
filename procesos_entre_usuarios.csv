@@ -1,0 +1,2 @@
+id,tipo,fecha,usuarioOrigen,usuarioDestino,tiquetes,eventoId,monto,estado,descripcion
+PROC-1763008886581,COMPRA_TIQUETE,2025-11-12 23:41:26,cliente1,,,,355.0,completado,Compra de 2 tiquetes para Concierto de Rock

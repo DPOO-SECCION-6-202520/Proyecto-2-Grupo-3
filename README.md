@@ -1,7 +1,7 @@
-# Proyecto 1 - Entrega 2
+# Proyecto 2 - Unica
 ## Diseño y Programación Orientada a Objetos (DPO)
 
-### Grupo 2
+### Grupo 3
 
 #### Integrantes:
 - **Juan David Colorado Pérez** - Código: 202415548
@@ -13,27 +13,29 @@
 ## Estructura del Proyecto
 
 src/
- ├── Main.java
- └── modelo/
-     ├── Aplicacion.java
-     ├── eventos/
-     │   ├── Evento.java
-     │   ├── Localidad.java
-     │   ├── Oferta.java
-     │   └── Venue.java
-     ├── pagos/
-     │   ├── Compra.java
-     │   └── Pagos.java
-     ├── persistencia/
-     ├── tiquetes/
-     │   ├── Deluxe.java
-     │   ├── EntradaMultiple.java
-     │   └── Tiquete.java
-     └── usuarios/
-         ├── Administrador.java
-         ├── Comprador.java
-         ├── Organizador.java
-         └── Usuario.java
+├── main/
+│   ├── MainComprador.java 
+│   ├── MainOrganizador.java  
+│   └── MainAdministrador.java 
+├── interfaz/
+│   ├── util/
+│   │   └── ValidadorEntradas.java 
+│   ├── MenuBase.java 
+│   └── MenuComprador.java
+├── Test/
+└── modelo/
+    ├── Eventos/
+    ├── Pagos/
+    ├── persistencia/
+    ├── Tiquetes/
+    ├── Usuarios/
+    └── Aplicain.java
+
+Conservamos el main original pero ademas se tienen los main especificos de cada tipo dentro de la carpeta main, para probarlo puede usar estos login y pasword:
+
+-Comprador: cliente1 / cliente123
+-Organizador: promotor1 / promo123
+-Administrador: admin / admin123
 
 ## Características Técnicas
 
