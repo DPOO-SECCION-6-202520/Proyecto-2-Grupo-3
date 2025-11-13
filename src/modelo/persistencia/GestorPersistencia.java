@@ -1,5 +1,9 @@
 package modelo.persistencia;
 
+import modelo.tiquetes.Tiquete;
+import modelo.tiquetes.TiqueteReventa;
+import modelo.tiquetes.Contraoferta;
+
 import modelo.usuarios.Usuario;
 import modelo.usuarios.Administrador;
 import modelo.usuarios.Comprador;
@@ -19,13 +23,17 @@ public class GestorPersistencia {
     private PersistenciaVenues persistenciaVenues;
     private PersistenciaProcesosEntreUsuarios persistenciaProcesos;
     private PersistenciaSolicitudes persistenciaSolicitudes;
-    
+    private PersistenciaReventas persistenciaReventas;
+    private PersistenciaContraofertas persistenciaContraofertas;
+
     // Colecciones en memoria
     private ArrayList<Usuario> usuarios;
     private ArrayList<Evento> eventos;
     private ArrayList<Venue> venues;
     private ArrayList<ProcesoEntreUsuarios> procesos;
     private ArrayList<Solicitud> solicitudes;
+    private ArrayList<TiqueteReventa> reventas;
+    private ArrayList<Contraoferta> contraofertas;
     
     public GestorPersistencia() {
         // Inicializar persistencias
@@ -34,6 +42,8 @@ public class GestorPersistencia {
         this.persistenciaVenues = new PersistenciaVenues();
         this.persistenciaProcesos = new PersistenciaProcesosEntreUsuarios();
         this.persistenciaSolicitudes = new PersistenciaSolicitudes();
+        this.persistenciaReventas = new PersistenciaReventas();
+        this.persistenciaContraofertas = new PersistenciaContraofertas();
         
         // Inicializar colecciones
         this.usuarios = new ArrayList<>();
@@ -41,6 +51,8 @@ public class GestorPersistencia {
         this.venues = new ArrayList<>();
         this.procesos = new ArrayList<>();
         this.solicitudes = new ArrayList<>();
+        this.reventas = new ArrayList<>();
+        this.contraofertas = new ArrayList<>();
     }
     
     /**
@@ -71,6 +83,17 @@ public class GestorPersistencia {
         // Cargar solicitudes (necesita usuarios, eventos y venues)
         this.solicitudes = persistenciaSolicitudes.cargarSolicitudes(usuarios, eventos, venues);
         System.out.println("Solicitudes cargadas: " + solicitudes.size());
+
+        // Obtener todos los tiquetes del sistema (de usuarios)
+        ArrayList<Tiquete> todosLosTiquetes = obtenerTodosLosTiquetes();
+        
+        // Cargar reventas (necesita tiquetes y usuarios)
+        this.reventas = persistenciaReventas.cargarReventas(todosLosTiquetes, usuarios);
+        System.out.println("Reventas cargadas: " + reventas.size());
+        
+        // Cargar contraofertas (necesita reventas y usuarios)
+        this.contraofertas = persistenciaContraofertas.cargarContraofertas(reventas, usuarios);
+        System.out.println("Contraofertas cargadas: " + contraofertas.size());
         
         System.out.println("=== CARGA DE DATOS COMPLETADA ===");
     }
@@ -86,6 +109,8 @@ public class GestorPersistencia {
         persistenciaEventos.guardarEventos(eventos);
         persistenciaProcesos.guardarProcesos(procesos);
         persistenciaSolicitudes.guardarSolicitudes(solicitudes);
+        persistenciaReventas.guardarReventas(reventas);
+        persistenciaContraofertas.guardarContraofertas(contraofertas);
         
         System.out.println("=== GUARDADO DE DATOS COMPLETADO ===");
     }
@@ -101,6 +126,22 @@ public class GestorPersistencia {
             }
         }
         return organizadores;
+    }
+
+    /**
+     * Obtiene todos los tiquetes del sistema (de compradores)
+     */
+    private ArrayList<Tiquete> obtenerTodosLosTiquetes() {
+        ArrayList<Tiquete> todosLosTiquetes = new ArrayList<>();
+        
+        for (Usuario usuario : usuarios) {
+            if (usuario instanceof Comprador) {
+                Comprador comprador = (Comprador) usuario;
+                todosLosTiquetes.addAll(comprador.getHistorialTiquetes());
+            }
+        }
+        
+        return todosLosTiquetes;
     }
     
     // ==================== MÉTODOS DE ACCESO A COLECCIONES ====================
@@ -127,6 +168,34 @@ public class GestorPersistencia {
     
     public ArrayList<Solicitud> getSolicitudesPendientes() {
         return persistenciaSolicitudes.getSolicitudesPendientes(solicitudes);
+    }
+
+    public ArrayList<TiqueteReventa> getReventas() {
+        return new ArrayList<>(reventas);
+    }
+    
+    public ArrayList<Contraoferta> getContraofertas() {
+        return new ArrayList<>(contraofertas);
+    }
+
+    public ArrayList<TiqueteReventa> getReventasActivas() {
+        ArrayList<TiqueteReventa> activas = new ArrayList<>();
+        for (TiqueteReventa reventa : reventas) {
+            if (reventa.isActivo() && reventa.puedeSerRevendido()) {
+                activas.add(reventa);
+            }
+        }
+        return activas;
+    }
+    
+    public ArrayList<Contraoferta> getContraofertasPendientes() {
+        ArrayList<Contraoferta> pendientes = new ArrayList<>();
+        for (Contraoferta contra : contraofertas) {
+            if (contra.estaPendiente()) {
+                pendientes.add(contra);
+            }
+        }
+        return pendientes;
     }
     
     // ==================== MÉTODOS DE AGREGACIÓN ====================
@@ -160,6 +229,18 @@ public class GestorPersistencia {
             solicitudes.add(solicitud);
         }
     }
+
+    public void agregarReventa(TiqueteReventa reventa) {
+        if (reventa != null && !reventas.contains(reventa)) {
+            reventas.add(reventa);
+        }
+    }
+    
+    public void agregarContraoferta(Contraoferta contraoferta) {
+        if (contraoferta != null && !contraofertas.contains(contraoferta)) {
+            contraofertas.add(contraoferta);
+        }
+    }
     
     // ==================== MÉTODOS DE BÚSQUEDA ====================
     
@@ -188,6 +269,54 @@ public class GestorPersistencia {
             }
         }
         return null;
+    }
+
+    public TiqueteReventa buscarReventaPorId(String id) {
+        for (TiqueteReventa reventa : reventas) {
+            if (reventa.getId().equals(id)) {
+                return reventa;
+            }
+        }
+        return null;
+    }
+    
+    public Contraoferta buscarContraofertaPorId(String id) {
+        for (Contraoferta contra : contraofertas) {
+            if (contra.getId().equals(id)) {
+                return contra;
+            }
+        }
+        return null;
+    }
+    
+    public ArrayList<TiqueteReventa> getReventasPorVendedor(Usuario vendedor) {
+        ArrayList<TiqueteReventa> reventasVendedor = new ArrayList<>();
+        for (TiqueteReventa reventa : reventas) {
+            if (reventa.getVendedor().equals(vendedor) && reventa.isActivo()) {
+                reventasVendedor.add(reventa);
+            }
+        }
+        return reventasVendedor;
+    }
+    
+    public ArrayList<Contraoferta> getContraofertasPorComprador(Usuario comprador) {
+        ArrayList<Contraoferta> contraofertasComprador = new ArrayList<>();
+        for (Contraoferta contra : contraofertas) {
+            if (contra.getComprador().equals(comprador)) {
+                contraofertasComprador.add(contra);
+            }
+        }
+        return contraofertasComprador;
+    }
+    
+    public ArrayList<Contraoferta> getContraofertasPorReventa(TiqueteReventa reventa) {
+        ArrayList<Contraoferta> contraofertasReventa = new ArrayList<>();
+        for (Contraoferta contra : contraofertas) {
+            if (contra.getTiqueteReventa().equals(reventa) && contra.estaPendiente()) {
+                contraofertasReventa.add(contra);
+            }
+        }
+        return contraofertasReventa;
     }
     
     public ArrayList<Comprador> getCompradores() {
@@ -252,8 +381,6 @@ public class GestorPersistencia {
     public void inicializarDatosPorDefecto() {
         if (usuarios.isEmpty() && eventos.isEmpty() && venues.isEmpty()) {
             System.out.println("Inicializando datos por defecto...");
-            // Aquí podrías llamar al método de inicialización de datos de prueba
-            // que ya tienes en Aplicacion.java
         }
     }
 }

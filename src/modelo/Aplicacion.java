@@ -1,8 +1,9 @@
 package modelo;
 
-import modelo.persistencia.GestorPersistencia;
+import modelo.tiquetes.TiqueteReventa;
+import modelo.tiquetes.Contraoferta;
 import modelo.persistencia.ProcesoEntreUsuarios;
-import modelo.persistencia.Solicitud;
+import modelo.persistencia.GestorPersistencia;
 import modelo.usuarios.Usuario;
 import modelo.usuarios.Administrador;
 import modelo.usuarios.Comprador;
@@ -310,6 +311,305 @@ public class Aplicacion {
         System.out.println("Oferta creada: " + descripcion);
         return oferta;
     }
+
+    // ==================== MÉTODOS DE REVENTA ====================
+    
+    /**
+     * Pone un tiquete en reventa
+     */
+    public TiqueteReventa ponerTiqueteEnReventa(Comprador vendedor, Tiquete tiquete, double precioReventa) {
+        if (!vendedor.getTipoUsuario().equals("comprador")) {
+            System.out.println("Error: Solo los compradores pueden revender tiquetes");
+            return null;
+        }
+        
+        if (!vendedor.getHistorialTiquetes().contains(tiquete)) {
+            System.out.println("Error: El tiquete no pertenece al vendedor");
+            return null;
+        }
+        
+        // Verificar que el tiquete puede ser revendido
+        if (tiquete instanceof modelo.tiquetes.Deluxe) {
+            System.out.println("Error: Los tiquetes Deluxe no se pueden revender");
+            return null;
+        }
+        
+        if (!tiquete.puedeSerTransferido()) {
+            System.out.println("Error: El tiquete no se puede transferir");
+            return null;
+        }
+        
+        // Verificar si ya está en reventa
+        for (TiqueteReventa reventa : gestorPersistencia.getReventas()) {
+            if (reventa.getTiquete().equals(tiquete) && reventa.isActivo()) {
+                System.out.println("Error: El tiquete ya está en reventa");
+                return null;
+            }
+        }
+        
+        // Crear reventa
+        String reventaId = "REV-" + System.currentTimeMillis();
+        TiqueteReventa reventa = new TiqueteReventa(reventaId, tiquete, vendedor, precioReventa);
+        gestorPersistencia.agregarReventa(reventa);
+        
+        // Registrar proceso
+        ProcesoEntreUsuarios proceso = new ProcesoEntreUsuarios(
+            "PROC-REV-" + System.currentTimeMillis(),
+            ProcesoEntreUsuarios.TipoProceso.TRANSFERENCIA_TIQUETE,
+            new Date(),
+            vendedor
+        );
+        proceso.agregarTiquete(tiquete);
+        proceso.setDescripcion("Tiquete puesto en reventa por " + precioReventa);
+        proceso.setEstado("pendiente");
+        gestorPersistencia.agregarProceso(proceso);
+        
+        guardarDatos();
+        System.out.println("Tiquete puesto en reventa: " + tiquete.getId() + " por $" + precioReventa);
+        return reventa;
+    }
+    
+    /**
+     * Compra un tiquete en reventa
+     */
+    public boolean comprarTiqueteReventa(Comprador comprador, TiqueteReventa reventa) {
+        if (!comprador.getTipoUsuario().equals("comprador")) {
+            System.out.println("Error: Solo los compradores pueden comprar tiquetes en reventa");
+            return false;
+        }
+        
+        if (!reventa.isActivo()) {
+            System.out.println("Error: El tiquete ya no está disponible en reventa");
+            return false;
+        }
+        
+        if (!reventa.puedeSerRevendido()) {
+            System.out.println("Error: El tiquete no se puede revender");
+            return false;
+        }
+        
+        // Procesar pago
+        if (!servicioPagos.procesarPagoConSaldo(comprador, reventa.getPrecioReventa())) {
+            System.out.println("Error: Saldo insuficiente para comprar el tiquete en reventa");
+            return false;
+        }
+        
+        // Transferir el pago al vendedor
+        servicioPagos.procesarReembolsoSaldo(
+            reventa.getVendedor(), 
+            reventa.getPrecioReventa(), 
+            "Venta de tiquete en reventa: " + reventa.getTiquete().getId()
+        );
+        
+        // Transferir el tiquete
+        Tiquete tiquete = reventa.getTiquete();
+        Comprador vendedor = (Comprador) reventa.getVendedor();
+        
+        // Remover del vendedor y agregar al comprador
+        vendedor.getHistorialTiquetes().remove(tiquete);
+        comprador.agregarTiqueteAlHistorial(tiquete);
+        
+        // Desactivar reventa
+        reventa.setActivo(false);
+        
+        // Registrar proceso
+        ProcesoEntreUsuarios proceso = new ProcesoEntreUsuarios(
+            "PROC-COMP-REV-" + System.currentTimeMillis(),
+            ProcesoEntreUsuarios.TipoProceso.TRANSFERENCIA_TIQUETE,
+            new Date(),
+            vendedor
+        );
+        proceso.agregarTiquete(tiquete);
+        proceso.setUsuarioDestino(comprador);
+        proceso.setMonto(reventa.getPrecioReventa());
+        proceso.setDescripcion("Tiquete comprado en reventa por " + comprador.getLogin());
+        proceso.setEstado("completado");
+        gestorPersistencia.agregarProceso(proceso);
+        
+        guardarDatos();
+        System.out.println("Tiquete comprado en reventa: " + tiquete.getId() + " por $" + reventa.getPrecioReventa());
+        return true;
+    }
+    
+    // ==================== MÉTODOS DE CONTRADOFERTAS ====================
+    
+    /**
+     * Crea una contraoferta para un tiquete en reventa
+     */
+    public Contraoferta crearContraoferta(Comprador comprador, TiqueteReventa reventa, double precioOfertado) {
+        if (!comprador.getTipoUsuario().equals("comprador")) {
+            System.out.println("Error: Solo los compradores pueden hacer contraofertas");
+            return null;
+        }
+        
+        if (!reventa.isActivo()) {
+            System.out.println("Error: El tiquete ya no está disponible en reventa");
+            return null;
+        }
+        
+        if (precioOfertado >= reventa.getPrecioReventa()) {
+            System.out.println("Error: La contraoferta debe ser menor al precio de reventa");
+            return null;
+        }
+        
+        // Verificar si ya existe una contraoferta pendiente del mismo comprador
+        for (Contraoferta contra : gestorPersistencia.getContraofertasPorReventa(reventa)) {
+            if (contra.getComprador().equals(comprador) && contra.estaPendiente()) {
+                System.out.println("Error: Ya tienes una contraoferta pendiente para este tiquete");
+                return null;
+            }
+        }
+        
+        // Crear contraoferta
+        String contraId = "CONTRA-" + System.currentTimeMillis();
+        Contraoferta contraoferta = new Contraoferta(contraId, reventa, comprador, precioOfertado);
+        gestorPersistencia.agregarContraoferta(contraoferta);
+        
+        // Registrar proceso
+        ProcesoEntreUsuarios proceso = new ProcesoEntreUsuarios(
+            "PROC-CONTRA-" + System.currentTimeMillis(),
+            ProcesoEntreUsuarios.TipoProceso.TRANSFERENCIA_TIQUETE,
+            new Date(),
+            comprador
+        );
+        proceso.agregarTiquete(reventa.getTiquete());
+        proceso.setUsuarioDestino(reventa.getVendedor());
+        proceso.setMonto(precioOfertado);
+        proceso.setDescripcion("Contraoferta de $" + precioOfertado + " para tiquete " + reventa.getTiquete().getId());
+        proceso.setEstado("pendiente");
+        gestorPersistencia.agregarProceso(proceso);
+        
+        guardarDatos();
+        System.out.println("Contraoferta creada: $" + precioOfertado + " para tiquete " + reventa.getTiquete().getId());
+        return contraoferta;
+    }
+    
+    /**
+     * Acepta una contraoferta
+     */
+    public boolean aceptarContraoferta(Comprador vendedor, Contraoferta contraoferta) {
+        if (!vendedor.getTipoUsuario().equals("comprador")) {
+            System.out.println("Error: Solo los compradores pueden aceptar contraofertas");
+            return false;
+        }
+        
+        if (!contraoferta.getTiqueteReventa().getVendedor().equals(vendedor)) {
+            System.out.println("Error: Solo el vendedor puede aceptar la contraoferta");
+            return false;
+        }
+        
+        if (!contraoferta.estaPendiente()) {
+            System.out.println("Error: La contraoferta ya no está pendiente");
+            return false;
+        }
+        
+        TiqueteReventa reventa = contraoferta.getTiqueteReventa();
+        Comprador comprador = (Comprador) contraoferta.getComprador();
+        
+        // Procesar la venta
+        if (!comprarTiqueteReventa(comprador, reventa)) {
+            System.out.println("Error: No se pudo procesar la venta de la contraoferta");
+            return false;
+        }
+        
+        // Aceptar la contraoferta
+        contraoferta.aceptar();
+        
+        // Rechazar otras contraofertas pendientes para el mismo tiquete
+        for (Contraoferta otraContra : gestorPersistencia.getContraofertasPorReventa(reventa)) {
+            if (!otraContra.equals(contraoferta) && otraContra.estaPendiente()) {
+                otraContra.rechazar();
+            }
+        }
+        
+        guardarDatos();
+        System.out.println("Contraoferta aceptada: tiquete vendido a " + comprador.getLogin());
+        return true;
+    }
+    
+    /**
+     * Rechaza una contraoferta
+     */
+    public boolean rechazarContraoferta(Comprador vendedor, Contraoferta contraoferta) {
+        if (!vendedor.getTipoUsuario().equals("comprador")) {
+            System.out.println("Error: Solo los compradores pueden rechazar contraofertas");
+            return false;
+        }
+        
+        if (!contraoferta.getTiqueteReventa().getVendedor().equals(vendedor)) {
+            System.out.println("Error: Solo el vendedor puede rechazar la contraoferta");
+            return false;
+        }
+        
+        if (!contraoferta.estaPendiente()) {
+            System.out.println("Error: La contraoferta ya no está pendiente");
+            return false;
+        }
+        
+        contraoferta.rechazar();
+        
+        // Registrar proceso
+        ProcesoEntreUsuarios proceso = new ProcesoEntreUsuarios(
+            "PROC-RECHAZO-" + System.currentTimeMillis(),
+            ProcesoEntreUsuarios.TipoProceso.TRANSFERENCIA_TIQUETE,
+            new Date(),
+            vendedor
+        );
+        proceso.agregarTiquete(contraoferta.getTiqueteReventa().getTiquete());
+        proceso.setUsuarioDestino(contraoferta.getComprador());
+        proceso.setMonto(contraoferta.getPrecioOfertado());
+        proceso.setDescripcion("Contraoferta rechazada por el vendedor");
+        proceso.setEstado("rechazado");
+        gestorPersistencia.agregarProceso(proceso);
+        
+        guardarDatos();
+        System.out.println("Contraoferta rechazada");
+        return true;
+    }
+    
+    // ==================== MÉTODOS ADMINISTRATIVOS ====================
+    
+    /**
+     * Elimina una oferta de reventa (solo administrador)
+     */
+    public boolean borrarOfertaReventa(Administrador admin, TiqueteReventa reventa) {
+        if (!admin.getTipoUsuario().equals("administrador")) {
+            System.out.println("Error: Solo los administradores pueden borrar ofertas de reventa");
+            return false;
+        }
+        
+        if (!reventa.isActivo()) {
+            System.out.println("Error: La oferta de reventa ya no está activa");
+            return false;
+        }
+        
+        // Desactivar la reventa
+        reventa.setActivo(false);
+        
+        // Rechazar todas las contraofertas pendientes
+        for (Contraoferta contra : gestorPersistencia.getContraofertasPorReventa(reventa)) {
+            if (contra.estaPendiente()) {
+                contra.rechazar();
+            }
+        }
+        
+        // Registrar proceso
+        ProcesoEntreUsuarios proceso = new ProcesoEntreUsuarios(
+            "PROC-BORRAR-" + System.currentTimeMillis(),
+            ProcesoEntreUsuarios.TipoProceso.TRANSFERENCIA_TIQUETE,
+            new Date(),
+            admin
+        );
+        proceso.agregarTiquete(reventa.getTiquete());
+        proceso.setUsuarioDestino(reventa.getVendedor());
+        proceso.setDescripcion("Oferta de reventa eliminada por administrador");
+        proceso.setEstado("cancelado");
+        gestorPersistencia.agregarProceso(proceso);
+        
+        guardarDatos();
+        System.out.println("Oferta de reventa eliminada por administrador: " + reventa.getId());
+        return true;
+    }
     
     // ==================== MÉTODOS DE CONSULTA ====================
     
@@ -347,6 +647,38 @@ public class Aplicacion {
     public void cerrarAplicacion() {
         guardarDatos();
         System.out.println("Aplicación cerrada. Datos guardados correctamente.");
+    }
+
+    /**
+     * Obtiene tiquetes en reventa activos
+     */
+    public ArrayList<TiqueteReventa> getTiquetesEnReventa() {
+        return gestorPersistencia.getReventasActivas();
+    }
+    
+    /**
+     * Obtiene contraofertas pendientes de un vendedor
+     */
+    public ArrayList<Contraoferta> getContraofertasPendientesParaVendedor(Comprador vendedor) {
+        ArrayList<Contraoferta> contraofertasVendedor = new ArrayList<>();
+        for (TiqueteReventa reventa : gestorPersistencia.getReventasPorVendedor(vendedor)) {
+            contraofertasVendedor.addAll(gestorPersistencia.getContraofertasPorReventa(reventa));
+        }
+        return contraofertasVendedor;
+    }
+    
+    /**
+     * Obtiene las reventas de un comprador
+     */
+    public ArrayList<TiqueteReventa> getReventasDeComprador(Comprador comprador) {
+        return gestorPersistencia.getReventasPorVendedor(comprador);
+    }
+    
+    /**
+     * Obtiene las contraofertas de un comprador
+     */
+    public ArrayList<Contraoferta> getContraofertasDeComprador(Comprador comprador) {
+        return gestorPersistencia.getContraofertasPorComprador(comprador);
     }
     
     // ==================== MÉTODOS DE INICIALIZACIÓN ====================

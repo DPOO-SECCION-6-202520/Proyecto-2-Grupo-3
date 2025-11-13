@@ -1,0 +1,5 @@
+login,password,saldoVirtual,tipoUsuario,porcentajeAdicional,cobroFijo,tiquetes
+promotor1,promo123,0.0,organizador,,,
+promotor2,promo123,0.0,organizador,,,
+cliente1,cliente123,795.0,comprador,,,TQ-E1-L1-1763008886513-0|150.0|true|false|NORMAL;TQ-E1-L1-1763008886523-1|150.0|true|false|NORMAL
+cliente2,cliente123,500.0,comprador,,,
