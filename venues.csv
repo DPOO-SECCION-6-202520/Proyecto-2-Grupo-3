@@ -1,3 +1,0 @@
-id,nombre,ubicacion,capacidad,aprobado,restricciones,localidades
-V1,Estadio Nacional,San José,50000,true,,L1|VIP|true|100|150.0;L2|General|false|400|50.0
-V2,Auditorio Nacional,San José,3000,true,,L3|VIP|true|50|200.0;L4|General|false|200|75.0
